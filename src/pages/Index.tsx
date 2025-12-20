@@ -1,13 +1,18 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Header } from '@/components/Header';
 import { WebcamView } from '@/components/WebcamView';
 import { GameCanvas } from '@/components/GameCanvas';
 import { GameUI } from '@/components/GameUI';
 import { GestureGuide } from '@/components/GestureGuide';
+import { TouchControls } from '@/components/TouchControls';
 import { useHandDetection } from '@/hooks/useHandDetection';
 import { useSnakeGame } from '@/hooks/useSnakeGame';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const Index = () => {
+  const isMobile = useIsMobile();
+  const [useTouchControls, setUseTouchControls] = useState(false);
+  
   const {
     isLoading,
     isReady,
@@ -35,12 +40,20 @@ const Index = () => {
     cellCount,
   } = useSnakeGame();
 
-  // Pass direction to game
+  // Determine if touch controls should be shown
   useEffect(() => {
-    if (direction && isPlaying && !isPaused) {
+    // Show touch controls on mobile or when there's a webcam error
+    if (isMobile || error) {
+      setUseTouchControls(true);
+    }
+  }, [isMobile, error]);
+
+  // Pass direction to game (from hand detection)
+  useEffect(() => {
+    if (direction && isPlaying && !isPaused && !useTouchControls) {
       setDirection(direction);
     }
-  }, [direction, isPlaying, isPaused, setDirection]);
+  }, [direction, isPlaying, isPaused, setDirection, useTouchControls]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -49,23 +62,83 @@ const Index = () => {
     };
   }, [stopDetection]);
 
+  // Handle touch control direction changes
+  const handleTouchDirection = (dir: typeof direction) => {
+    if (dir && isPlaying && !isPaused) {
+      setDirection(dir);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background grid-bg">
       <div className="container mx-auto px-4 py-8 max-w-6xl">
         <Header />
 
         <div className="grid lg:grid-cols-2 gap-6">
-          {/* Left Column - Webcam */}
+          {/* Left Column - Webcam or Touch Controls */}
           <div className="space-y-4">
-            <WebcamView
-              isLoading={isLoading}
-              isReady={isReady}
-              error={error}
-              direction={direction}
-              landmarks={landmarks}
-              onVideoReady={startDetection}
-            />
-            <GestureGuide currentDirection={direction} />
+            {!useTouchControls ? (
+              <>
+                <WebcamView
+                  isLoading={isLoading}
+                  isReady={isReady}
+                  error={error}
+                  direction={direction}
+                  landmarks={landmarks}
+                  onVideoReady={startDetection}
+                />
+                <GestureGuide currentDirection={direction} />
+              </>
+            ) : (
+              <div className="bg-card/30 rounded-lg p-6 neon-border">
+                <div className="flex flex-col items-center justify-center min-h-[300px] gap-6">
+                  {error && (
+                    <div className="text-center mb-4">
+                      <p className="text-sm text-muted-foreground font-orbitron mb-2">
+                        WEBCAM UNAVAILABLE
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Using touch controls instead
+                      </p>
+                    </div>
+                  )}
+                  {isMobile && !error && (
+                    <div className="text-center mb-4">
+                      <p className="text-sm text-muted-foreground font-orbitron mb-2">
+                        MOBILE DEVICE DETECTED
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Use the buttons below to control the snake
+                      </p>
+                    </div>
+                  )}
+                  <TouchControls
+                    onDirectionChange={handleTouchDirection}
+                    disabled={!isPlaying || isPaused}
+                  />
+                </div>
+                
+                {/* Toggle button to switch to webcam on mobile if desired */}
+                {isMobile && !error && (
+                  <button
+                    onClick={() => setUseTouchControls(false)}
+                    className="mt-4 w-full text-xs text-primary/70 hover:text-primary font-orbitron transition-colors"
+                  >
+                    TRY WEBCAM CONTROLS INSTEAD
+                  </button>
+                )}
+              </div>
+            )}
+            
+            {/* Show toggle to go back to touch controls when using webcam on mobile */}
+            {!useTouchControls && isMobile && (
+              <button
+                onClick={() => setUseTouchControls(true)}
+                className="w-full text-xs text-primary/70 hover:text-primary font-orbitron transition-colors py-2"
+              >
+                SWITCH TO TOUCH CONTROLS
+              </button>
+            )}
           </div>
 
           {/* Right Column - Game */}
@@ -98,11 +171,16 @@ const Index = () => {
         {/* Footer */}
         <footer className="mt-12 text-center">
           <p className="text-xs text-muted-foreground font-orbitron">
-            POWERED BY TENSORFLOW.JS & MEDIAPIPE HANDPOSE
+            {useTouchControls 
+              ? 'TOUCH CONTROLS ACTIVE' 
+              : 'POWERED BY TENSORFLOW.JS & MEDIAPIPE HANDPOSE'
+            }
           </p>
           <div className="mt-2 flex items-center justify-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-            <span className="text-xs text-primary">COMPUTER VISION ACTIVE</span>
+            <span className={`w-2 h-2 rounded-full ${useTouchControls ? 'bg-secondary' : 'bg-primary'} animate-pulse`} />
+            <span className="text-xs text-primary">
+              {useTouchControls ? 'TOUCH MODE' : 'COMPUTER VISION ACTIVE'}
+            </span>
           </div>
         </footer>
       </div>
